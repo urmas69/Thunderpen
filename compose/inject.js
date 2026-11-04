@@ -71,14 +71,8 @@
     });
   }
   if (document.body) {
-    const before = Array.from(document.body.querySelectorAll('img'))
-      .map(im => ({ src: im.getAttribute('src'), cls: im.className }));
-    console.log('[TinyMCE inject] 等待內嵌圖片載入前，現有 img：', before);
-    await waitForImagesToSettle(document.body, 8000);
-    const after = Array.from(document.body.querySelectorAll('img'))
-      .map(im => ({ src: im.getAttribute('src'), cls: im.className }));
-    console.log('[TinyMCE inject] 等待完成後，img 狀態：', after);
-  }
+await waitForImagesToSettle(document.body, 8000);
+}
 
   // 註：曾嘗試在這裡把 blob: 圖片自己 fetch 轉成 data: URI（base64），實測
   // content script 連同一份文件裡、Thunderbird 自己建立的 blob 都讀不到
@@ -736,10 +730,7 @@ await new Promise(r => setTimeout(r, 100));
         // 取得乾淨的編輯器內容：用 DOM 解析後濾掉所有 UI 殘留節點
         const cleanContent = () => {
           const raw = ed.getContent();
-          // 診斷用：確認 ed.getContent() 這一步的字串本身是否還留著 img/src
-          console.log('[TinyMCE inject] ed.getContent() 內的 <img>：',
-            raw.match(/<img[^>]*>/gi) || []);
-          // 用 DOMParser 解析，移除任何含 UI class / data-kc-ui 標記的節點
+// 用 DOMParser 解析，移除任何含 UI class / data-kc-ui 標記的節點
           const doc = new DOMParser().parseFromString(
             '<div>' + raw + '</div>', 'text/html'
           );
@@ -751,10 +742,7 @@ await new Promise(r => setTimeout(r, 100));
             ).forEach(n => n.remove());
             restorePristineImages(root);
             markRemoteImages(root);
-            // 診斷用：確認過濾/標記後最終要回傳出去的字串內 img 狀態
-            console.log('[TinyMCE inject] cleanContent() 最終輸出的 <img>：',
-              Array.from(root.querySelectorAll('img')).map(im => im.outerHTML));
-            return root.innerHTML;
+return root.innerHTML;
           }
           return raw;
         };
@@ -767,14 +755,9 @@ await new Promise(r => setTimeout(r, 100));
 
         port.onMessage.addListener(msg => {
           if (msg.action === 'requestContent') {
-            console.log('[TinyMCE inject] 收到 requestContent（送出流程要內容了）');
-            port.postMessage({ action: 'content', html: cleanContent() });
+port.postMessage({ action: 'content', html: cleanContent() });
           } else if (msg.action === 'prepareForSend') {
-            // 診斷用：送出當下，畫面上「活的」DOM 裡 img 的實際狀態
-            console.log('[TinyMCE inject] prepareForSend 當下，現有 <img>：',
-              Array.from(document.querySelectorAll('img'))
-                .map(im => ({ src: im.getAttribute('src'), cls: im.className })));
-            // 1. 停掉 MutationObserver 還原邏輯
+// 1. 停掉 MutationObserver 還原邏輯
             window.__kc_setSending?.(true);
             // 2. 從整個 document 徹底移除所有 UI 元素（不能只搬到 html，
             //    因為 Thunderbird 序列化的是整份 HTML 不只 body）
