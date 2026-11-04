@@ -582,6 +582,73 @@ await new Promise(r => setTimeout(r, 100));
     );
   }
 
+
+  // Apply one mail-friendly typography to pasted and outgoing HTML.
+  // Retain structure and emphasis, never fonts/sizes/colors from pasted documents.
+  const MAIL_STYLE = 'font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#222222;';
+  function normalizeMailHtml(html, forPaste = false) {
+    const doc = new DOMParser().parseFromString(
+      '<div id="kc-normalize-root">' + html + '</div>', 'text/html');
+    const root = doc.getElementById('kc-normalize-root');
+    if (!root) return html;
+    const discarded = new Set(['SCRIPT','STYLE','META','LINK','IFRAME','OBJECT',
+      'EMBED','FORM','INPUT','BUTTON','TEXTAREA','SELECT','SVG']);
+    const semantic = new Set(['A','B','STRONG','I','EM','U','S','BR','P','DIV',
+      'UL','OL','LI','TABLE','THEAD','TBODY','TFOOT','TR','TD','TH','BLOCKQUOTE',
+      'IMG','CODE','PRE','HR']);
+    function walk(parent) {
+      for (const node of Array.from(parent.children)) {
+        if (discarded.has(node.tagName)) { node.remove(); continue; }
+        walk(node);
+        if (/^H[1-6]$/.test(node.tagName)) {
+          const p = doc.createElement('p');
+          const strong = doc.createElement('strong');
+          while (node.firstChild) strong.appendChild(node.firstChild);
+          p.appendChild(strong);
+          node.replaceWith(p);
+          // The newly created paragraph will get its default style below.
+          p.setAttribute('style', 'margin:0 0 12px 0;');
+          continue;
+        }
+        if (node.tagName === 'FONT' || node.tagName === 'SPAN' ||
+            (forPaste && !semantic.has(node.tagName))) {
+          node.replaceWith(...Array.from(node.childNodes));
+          continue;
+        }
+        for (const attr of Array.from(node.attributes)) {
+          const name = attr.name.toLowerCase(), value = attr.value.trim();
+          const allowed =
+            (node.tagName === 'A' && (name === 'title' ||
+              (name === 'href' && /^(https?:|mailto:|#)/i.test(value)))) ||
+            (node.tagName === 'IMG' &&
+              ['src','alt','title','width','height','data-kc-img-id','moz-do-not-send'].includes(name) &&
+              (name !== 'src' || /^(https?:|cid:|data:image\/|blob:|mailbox:|imap:)/i.test(value))) ||
+            (['TD','TH'].includes(node.tagName) && ['colspan','rowspan'].includes(name)) ||
+            (['TABLE','TD','TH'].includes(node.tagName) && name === 'width') ||
+            (['OL','LI'].includes(node.tagName) && ['start','value'].includes(name));
+          if (!allowed) node.removeAttribute(attr.name);
+        }
+        if (node.tagName === 'P') node.setAttribute('style', 'margin:0 0 12px 0;');
+        if (node.tagName === 'UL' || node.tagName === 'OL')
+          node.setAttribute('style', 'margin:0 0 12px 0;padding-left:24px;');
+        if (node.tagName === 'LI') node.setAttribute('style', 'margin:0 0 4px 0;');
+        if (node.tagName === 'TABLE')
+          node.setAttribute('style', 'border-collapse:collapse;margin:0 0 12px 0;');
+        if (node.tagName === 'TD' || node.tagName === 'TH')
+          node.setAttribute('style', 'padding:4px 8px;border:1px solid #cccccc;');
+        if (node.tagName === 'CODE' || node.tagName === 'PRE')
+          node.setAttribute('style', 'font-family:Arial,Helvetica,sans-serif;font-size:14px;');
+      }
+    }
+    walk(root);
+    if (forPaste) return root.innerHTML;
+    const wrapper = doc.createElement('div');
+    wrapper.setAttribute('style', MAIL_STYLE);
+    while (root.firstChild) wrapper.appendChild(root.firstChild);
+    root.appendChild(wrapper);
+    return root.innerHTML;
+  }
+
   // ── 初始化 TinyMCE ────────────────────────────────────────────────────────
   tmce.init({
     selector: '#kc-content',
@@ -636,11 +703,12 @@ await new Promise(r => setTimeout(r, 100));
       'column | deletetable',
 
     content_style:
-      '#kc-content { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",' +
-      '"Microsoft JhengHei", "PingFang TC", sans-serif; font-size: 14px;' +
-      'line-height: 1.6; padding: 8px 12px; color: #1a1a1a; }' +
-      'table { border-collapse: collapse; }' +
-      'td, th { border: 1px solid #ccc; padding: 4px 8px; }',
+      '#kc-content { font-family:Arial,Helvetica,sans-serif;font-size:14px;' +
+      'line-height:1.5;padding:8px 12px;color:#222222; }' +
+      '#kc-content p { margin:0 0 12px 0; }' +
+      '#kc-content ul, #kc-content ol { margin:0 0 12px 0;padding-left:24px; }' +
+      'table { border-collapse:collapse; }' +
+      'td, th { border:1px solid #ccc;padding:4px 8px; }',
 
     setup(ed) {
       // 工具列上的「關閉編輯器」出口：不必等到貼上圖片才有辦法退回原生編輯器
@@ -693,6 +761,7 @@ await new Promise(r => setTimeout(r, 100));
         }, true);
         ed.on('PastePreProcess', (e) => {
           if (/<img[\s>]/i.test(e.content || '')) showPasteImageWarning();
+          e.content = normalizeMailHtml(e.content || '', true);
         });
 
         // ─── 修正：表格 picker 視覺同步 ─────────────────────────────────────
@@ -742,7 +811,7 @@ await new Promise(r => setTimeout(r, 100));
             ).forEach(n => n.remove());
             restorePristineImages(root);
             markRemoteImages(root);
-return root.innerHTML;
+return normalizeMailHtml(root.innerHTML);
           }
           return raw;
         };
