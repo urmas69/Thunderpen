@@ -28,8 +28,7 @@
     "compose",
     "storage",
     "accountsRead",
-    "accountsIdentities",
-    "messagesRead"
+    "accountsIdentities"
   ],
   "web_accessible_resources": [
     "tinymce/*",
