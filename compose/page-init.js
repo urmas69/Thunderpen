@@ -51,8 +51,8 @@ console.log('[TinyMCE page-init] window.tinymce 型別:', typeof window.tinymce)
         if (f.ff) ed.formatter.apply('fontname',  { value: f.ff });
       }
       ed.ui.registry.addToggleButton('kc_fp', {
-        text: '複製格式',
-        tooltip: '點擊複製目前格式，再選取目標文字套用',
+        text: 'Format Painter',
+        tooltip: 'Copy current formatting, then select text to apply it',
         onSetup: api => {
           const upd = () => api.setActive(painting);
           ed.on('SelectionChange NodeChange', upd);

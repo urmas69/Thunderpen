@@ -1,24 +1,45 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>雷霆筆 Thunderpen - 設定</title>
+  <title>Thunderpen - Settings</title>
   <link rel="stylesheet" href="options.css">
 </head>
 <body>
   <main class="container">
     <header>
-      <h1>⚡ 雷霆筆 Thunderpen</h1>
-      <p class="subtitle">編輯器設定</p>
+      <h1>⚡ Thunderpen</h1>
+      <p class="subtitle">Editor settings</p>
     </header>
 
     <section class="card">
       <label for="lang-select">
-        <span class="label-title">編輯器介面語系</span>
-        <span class="label-hint">變更後請關閉並重新開啟撰寫視窗即可生效。</span>
+        <span class="label-title">Editor language</span>
+        <span class="label-hint">Close and reopen the compose window to apply changes.</span>
       </label>
       <select id="lang-select"></select>
       <div id="lang-status" class="status"></div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div class="row-text">
+          <span class="label-title">Pasted image warning</span>
+          <span class="label-hint">Warn when pasting images may cause broken images. You can then switch to the built-in Thunderbird editor.</span>
+        </div>
+        <button id="toggle-paste-warn" class="primary-btn">Loading…</button>
+      </div>
+      <div id="paste-warn-status" class="status"></div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div class="row-text">
+          <span class="label-title">Signature editor</span>
+          <span class="label-hint">Manage HTML signatures for each account using TinyMCE.</span>
+        </div>
+        <button id="open-signature-editor" class="primary-btn">Open signature editor</button>
+      </div>
     </section>
 
     <footer>

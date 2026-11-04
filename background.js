@@ -51,6 +51,8 @@ browser.runtime.onConnect.addListener((port) => {
       case 'getComposeDetails': {
         try {
           const details = await messenger.compose.getComposeDetails(tabId);
+
+          // Do not restore original remote image URLs: this can reintroduce tracking pixels.
           port.postMessage({ action: 'composeDetails', details });
         } catch (e) {
           console.error('[TinyMCE] getComposeDetails failed:', e);
@@ -107,41 +109,53 @@ const pendingResolvers = new Map();
 /** tabId -> ack resolver */
 const pendingAcks = new Map();
 
+// Never send cached, empty or potentially stale HTML if the editor fails to respond.
+// Fetch content BEFORE removing the toolbar so a failed request leaves the editor usable.
 messenger.compose.onBeforeSend.addListener(async (tab) => {
   const port = composePorts.get(tab.id);
-  if (!port) return {};
+  if (!port) return {}; // The user may have switched back to Thunderbird's native editor.
 
-  const cached = latestContent.get(tab.id);
-
-  // 1. 先要求 compose script 把 toolbar 移出 body，並等待 ack
-  const ackPromise = new Promise((resolve) => {
-    const t = setTimeout(() => { pendingAcks.delete(tab.id); resolve(); }, 1000);
-    pendingAcks.set(tab.id, () => { clearTimeout(t); resolve(); });
-  });
-  try { port.postMessage({ action: 'prepareForSend' }); } catch (_) {}
-  await ackPromise;
-
-  // 2. 取得乾淨內容
-  const html = await new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      pendingResolvers.delete(tab.id);
-      resolve(cached ?? '');
-    }, 3000);
-    pendingResolvers.set(tab.id, (content) => {
-      clearTimeout(timeout);
-      resolve(content);
-    });
-    try { port.postMessage({ action: 'requestContent' }); }
-    catch (_) { clearTimeout(timeout); pendingResolvers.delete(tab.id); resolve(cached ?? ''); }
-  });
-
-  // 3. 明確呼叫 setComposeDetails 寫回 body
+  let html;
   try {
-    await messenger.compose.setComposeDetails(tab.id, { body: html });
-  } catch (e) {
-    console.error('[TinyMCE BG] setComposeDetails on send failed:', e);
-  }
+    html = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingResolvers.delete(tab.id);
+        reject(new Error('Editor did not return its latest content within 3 seconds'));
+      }, 3000);
+      pendingResolvers.set(tab.id, (content) => {
+        clearTimeout(timeout);
+        resolve(content);
+      });
+      try { port.postMessage({ action: 'requestContent' }); }
+      catch (error) {
+        clearTimeout(timeout);
+        pendingResolvers.delete(tab.id);
+        reject(error);
+      }
+    });
+    if (typeof html !== 'string') throw new Error('Editor returned invalid HTML content');
 
-  // 4. 同時走 return details 路徑（雙保險）
-  return { details: { body: html } };
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        pendingAcks.delete(tab.id);
+        reject(new Error('Editor did not acknowledge send preparation'));
+      }, 1000);
+      pendingAcks.set(tab.id, () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+      try { port.postMessage({ action: 'prepareForSend' }); }
+      catch (error) {
+        clearTimeout(timeout);
+        pendingAcks.delete(tab.id);
+        reject(error);
+      }
+    });
+
+    await messenger.compose.setComposeDetails(tab.id, { body: html });
+    return { details: { body: html } };
+  } catch (error) {
+    console.error('[Thunderpen] Send cancelled: editor synchronization failed:', error);
+    return { cancel: true };
+  }
 });
