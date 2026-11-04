@@ -610,8 +610,26 @@ await new Promise(r => setTimeout(r, 100));
           p.setAttribute('style', 'margin:0 0 12px 0;');
           continue;
         }
-        if (node.tagName === 'FONT' || node.tagName === 'SPAN' ||
-            (forPaste && !semantic.has(node.tagName))) {
+        if (node.tagName === 'FONT' || node.tagName === 'SPAN') {
+          // Word/browser content often encodes bold/italic only as CSS on spans.
+          const style = node.getAttribute('style') || '';
+          const isBold = /font-weight\s*:\s*(?:bold|[6-9]00)\b/i.test(style);
+          const isItalic = /font-style\s*:\s*italic\b/i.test(style);
+          let children = Array.from(node.childNodes);
+          if (isItalic) {
+            const em = doc.createElement('em');
+            children.forEach(n => em.appendChild(n));
+            children = [em];
+          }
+          if (isBold) {
+            const strong = doc.createElement('strong');
+            children.forEach(n => strong.appendChild(n));
+            children = [strong];
+          }
+          node.replaceWith(...children);
+          continue;
+        }
+        if (forPaste && !semantic.has(node.tagName)) {
           node.replaceWith(...Array.from(node.childNodes));
           continue;
         }
