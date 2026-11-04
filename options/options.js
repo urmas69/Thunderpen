@@ -47,7 +47,7 @@ async function buildOptions() {
     const ok = await hasLangFile(lang.code);
     const opt = document.createElement('option');
     opt.value = lang.code;
-    opt.textContent = ok ? lang.label : `${lang.label}（未安裝語系檔）`;
+    opt.textContent = ok ? lang.label : `${lang.label} (language pack not installed)`;
     opt.disabled = !ok;
     select.appendChild(opt);
   }
@@ -57,7 +57,7 @@ async function loadCurrent() {
   try {
     const { tinymce_lang } = await browser.storage.local.get('tinymce_lang');
     // 相容舊版底線格式 zh_TW → zh-TW
-    const code = (tinymce_lang || 'zh-TW').replace(/_/g, '-');
+    const code = (tinymce_lang || 'en').replace(/_/g, '-');
     select.value = code;
     // 若舊值已換新，立即寫回
     if (tinymce_lang && tinymce_lang !== code) {
@@ -78,13 +78,68 @@ function showStatus(msg) {
 select.addEventListener('change', async () => {
   try {
     await browser.storage.local.set({ tinymce_lang: select.value });
-    showStatus('✓ 已儲存，下次開啟撰寫視窗時生效');
+    showStatus('✓ Saved. Applies to the next compose window.');
   } catch (e) {
-    showStatus('✗ 儲存失敗：' + e.message);
+    showStatus('✗ Could not save: ' + e.message);
+  }
+});
+
+// ── 貼上圖片提醒開關 ──────────────────────────────────────────────────────
+// 撰寫視窗的提醒對話框上有「不再提醒」按鈕，會把 paste_image_warn_off 設為
+// true；這裡提供重新開啟的入口，避免關掉之後就再也打不開。
+const PASTE_WARN_OFF_KEY = 'paste_image_warn_off';
+const pasteWarnBtn    = document.getElementById('toggle-paste-warn');
+const pasteWarnStatus = document.getElementById('paste-warn-status');
+
+function renderPasteWarnBtn(off) {
+  pasteWarnBtn.textContent = off ? 'Disabled (click to enable)' : 'Enabled (click to disable)';
+}
+
+async function loadPasteWarn() {
+  try {
+    const stored = await browser.storage.local.get(PASTE_WARN_OFF_KEY);
+    renderPasteWarnBtn(!!stored[PASTE_WARN_OFF_KEY]);
+  } catch (_) {
+    renderPasteWarnBtn(false);
+  }
+}
+
+pasteWarnBtn.addEventListener('click', async () => {
+  try {
+    const stored = await browser.storage.local.get(PASTE_WARN_OFF_KEY);
+    const next = !stored[PASTE_WARN_OFF_KEY];
+    await browser.storage.local.set({ [PASTE_WARN_OFF_KEY]: next });
+    renderPasteWarnBtn(next);
+    showPasteWarnStatus(next ? '✓ Warning disabled' : '✓ Warning enabled');
+  } catch (e) {
+    showPasteWarnStatus('✗ Could not save: ' + e.message);
+  }
+});
+
+function showPasteWarnStatus(msg) {
+  pasteWarnStatus.textContent = msg;
+  pasteWarnStatus.classList.add('visible');
+  clearTimeout(showPasteWarnStatus._t);
+  showPasteWarnStatus._t = setTimeout(
+    () => pasteWarnStatus.classList.remove('visible'), 2500);
+}
+
+// 開啟簽名檔編輯器（新視窗）
+document.getElementById('open-signature-editor').addEventListener('click', async () => {
+  try {
+    await browser.windows.create({
+      url: browser.runtime.getURL('signature/editor.html'),
+      type: 'popup',
+      width: 900,
+      height: 680
+    });
+  } catch (e) {
+    alert('Could not open signature editor: ' + e.message);
   }
 });
 
 (async function init() {
   await buildOptions();
   await loadCurrent();
+  await loadPasteWarn();
 })();

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Signature Editor - Thunderpen</title>
+  <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="title">
+      <span class="icon">⚡</span>
+      <span>Signature editor</span>
+    </div>
+    <div class="identity-picker">
+      <label for="identity-select">Identity:</label>
+      <select id="identity-select"></select>
+    </div>
+  </header>
+
+  <main class="editor-wrap">
+    <textarea id="editor-area" aria-label="signature editor"></textarea>
+  </main>
+
+  <footer class="actions">
+    <span id="status" class="status"></span>
+    <div class="spacer"></div>
+    <button id="btn-cancel" class="btn btn-ghost">Cancel</button>
+    <button id="btn-save" class="btn btn-primary">Save</button>
+  </footer>
+
+  <script src="../tinymce/js/tinymce/tinymce.min.js"></script>
+  <script src="editor.js"></script>
+</body>
+</html>

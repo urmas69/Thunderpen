@@ -51,6 +51,20 @@ browser.runtime.onConnect.addListener((port) => {
       case 'getComposeDetails': {
         try {
           const details = await messenger.compose.getComposeDetails(tabId);
+
+          // 轉寄／回覆時：Thunderbird 會把原信中的遠端圖片快取到本地，
+          // 使 src 變成 mailbox://... 收件人無法解析。這裡讀取原信、
+          // 按順序把 mailbox 圖片還原成原本的 http/https URL。
+          if (details.relatedMessageId && details.body) {
+            try {
+              details.body = await restoreRemoteImageUrls(
+                details.body, details.relatedMessageId
+              );
+            } catch (e) {
+              console.warn('[TinyMCE] restoreRemoteImageUrls failed:', e);
+            }
+          }
+
           port.postMessage({ action: 'composeDetails', details });
         } catch (e) {
           console.error('[TinyMCE] getComposeDetails failed:', e);
@@ -135,6 +149,10 @@ messenger.compose.onBeforeSend.addListener(async (tab) => {
     catch (_) { clearTimeout(timeout); pendingResolvers.delete(tab.id); resolve(cached ?? ''); }
   });
 
+  // 診斷用：送出前最終要寫回 body 的字串裡，img 標籤實際長怎樣
+  console.log('[TinyMCE BG] onBeforeSend 最終 html 裡的 <img>：',
+    html.match(/<img[^>]*>/gi) || []);
+
   // 3. 明確呼叫 setComposeDetails 寫回 body
   try {
     await messenger.compose.setComposeDetails(tab.id, { body: html });
@@ -145,3 +163,56 @@ messenger.compose.onBeforeSend.addListener(async (tab) => {
   // 4. 同時走 return details 路徑（雙保險）
   return { details: { body: html } };
 });
+
+
+// ── 遠端圖片 URL 還原 ─────────────────────────────────────────────────────
+// 當 compose 是 reply/forward 時，Thunderbird 會把原信的遠端圖片快取為
+// mailbox:// 本地路徑，寄出後收件人無法載入。本區塊：
+// 1. 讀取原始信件（messenger.messages.getFull）
+// 2. 從原信 HTML 抓出所有 <img> 的原始 src（http/https）
+// 3. 依「圖片出現順序」把 compose body 中的 mailbox:// 替換回原始 URL
+
+async function restoreRemoteImageUrls(currentHtml, relatedMessageId) {
+  // 先看 compose body 是否真的有 mailbox:// 圖片，沒有就不必查原信
+  if (!/src=["']mailbox:/i.test(currentHtml)) return currentHtml;
+
+  // 取原信 HTML 部分
+  const full = await messenger.messages.getFull(relatedMessageId);
+  const originalHtml = findFirstHtmlPart(full);
+  if (!originalHtml) return currentHtml;
+
+  const parser = new DOMParser();
+  const cur = parser.parseFromString(currentHtml, 'text/html');
+  const org = parser.parseFromString(originalHtml, 'text/html');
+
+  const curImgs = Array.from(cur.querySelectorAll('img'));
+  const orgImgs = Array.from(org.querySelectorAll('img'));
+
+  const n = Math.min(curImgs.length, orgImgs.length);
+  let replaced = 0;
+  for (let i = 0; i < n; i++) {
+    const curSrc = curImgs[i].getAttribute('src') || '';
+    const orgSrc = orgImgs[i].getAttribute('src') || '';
+    if (/^mailbox:/i.test(curSrc) && /^https?:/i.test(orgSrc)) {
+      curImgs[i].setAttribute('src', orgSrc);
+      replaced++;
+    }
+  }
+
+  if (replaced === 0) return currentHtml;
+  return cur.body.innerHTML;
+}
+
+/** 遞迴走訪 MessagePart 樹，找出第一個 text/html 部分的 body */
+function findFirstHtmlPart(part) {
+  if (!part) return null;
+  const type = (part.contentType || '').toLowerCase();
+  if (type === 'text/html' && part.body) return part.body;
+  if (Array.isArray(part.parts)) {
+    for (const p of part.parts) {
+      const html = findFirstHtmlPart(p);
+      if (html) return html;
+    }
+  }
+  return null;
+}

@@ -109,6 +109,35 @@ select:focus {
   opacity: 1;
 }
 
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.row-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+
+.primary-btn {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.primary-btn:hover { filter: brightness(1.1); }
+.primary-btn:active { filter: brightness(0.9); }
+
 footer {
   text-align: center;
   margin-top: 24px;
